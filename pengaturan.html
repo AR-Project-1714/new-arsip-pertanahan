@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <meta name="description" content="SIAP Loktuan — Pengaturan.">
+  <title>SIAP Loktuan — Pengaturan</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
+  <link rel="stylesheet" href="assets/styles.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="assets/store.js"></script>
+  <script type="text/babel" src="assets/components.js"></script>
+  <script type="text/babel" src="assets/app.js"></script>
+
+  <script type="text/babel">
+const { useState } = React;
+
+function Pengaturan({ onReset }) {
+  const toast = useToast();
+  const [pwd, setPwd] = useState({ lama: "", baru: "", konf: "" });
+  const submitPwd = () => {
+    if (!pwd.lama || !pwd.baru) { toast.error("Field belum lengkap", "Password lama dan baru wajib diisi"); return; }
+    if (pwd.baru !== pwd.konf) { toast.error("Konfirmasi tidak cocok"); return; }
+    if (pwd.baru.length < 8) { toast.error("Password terlalu pendek", "Minimal 8 karakter"); return; }
+    setPwd({ lama: "", baru: "", konf: "" });
+    toast.success("Password berhasil diubah");
+  };
+  return (
+    <div data-screen-label="Pengaturan">
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 16 }}>
+        <div className="card card-pad">
+          <h3 style={{ margin: 0, fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}><Icon name="key" size={16}/> Ganti Password</h3>
+          <div style={{ color: "var(--ink-3)", fontSize: 12.5, marginTop: 4 }}>Perbarui password operator. Minimum 8 karakter, gabungan huruf dan angka.</div>
+          <div className="col" style={{ marginTop: 16, maxWidth: 360 }}>
+            <Field label="Password lama" required><input className="input" type="password" value={pwd.lama} onChange={(e) => setPwd({ ...pwd, lama: e.target.value })}/></Field>
+            <Field label="Password baru" required><input className="input" type="password" value={pwd.baru} onChange={(e) => setPwd({ ...pwd, baru: e.target.value })}/></Field>
+            <Field label="Konfirmasi password" required><input className="input" type="password" value={pwd.konf} onChange={(e) => setPwd({ ...pwd, konf: e.target.value })}/></Field>
+            <Btn variant="primary" icon="save" onClick={submitPwd} style={{ alignSelf: "flex-start", marginTop: 6 }}>Simpan Password</Btn>
+          </div>
+        </div>
+
+        <div className="col">
+          <div className="card card-pad">
+            <h3 style={{ margin: 0, fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}><Icon name="info" size={16}/> Informasi Sistem</h3>
+            <dl className="kv" style={{ marginTop: 14 }}>
+              <dt>Aplikasi</dt><dd>SIAP — Sistem Arsip Digital Pertanahan</dd>
+              <dt>Versi prototype</dt><dd>3.0.0 (simulasi)</dd>
+              <dt>Target stack</dt><dd>React + Postgres + S3-compatible</dd>
+              <dt>Storage</dt><dd>localStorage browser</dd>
+              <dt>Backup terakhir</dt><dd>Sabtu, 10 Mei 2026 · 03:00 WITA</dd>
+              <dt>Session timeout</dt><dd>30 menit idle</dd>
+            </dl>
+          </div>
+          <div className="card card-pad">
+            <h3 style={{ margin: 0, fontSize: 15, color: "var(--danger)", display: "flex", alignItems: "center", gap: 8 }}><Icon name="alert" size={16}/> Reset Simulasi</h3>
+            <div style={{ color: "var(--ink-3)", fontSize: 12.5, marginTop: 4 }}>Mengembalikan seluruh data (surat tanah, arsip, pihak, audit) ke contoh awal. Tindakan ini tidak bisa dibatalkan.</div>
+            <Btn variant="danger" icon="refresh" style={{ marginTop: 14 }} onClick={() => {
+              onReset();
+              toast.warn("Data simulasi direset", "Semua entitas dikembalikan ke contoh awal");
+            }}>Reset Simulasi</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+mountPage({
+  active: "pengaturan",
+  render: ({ setState }) => <Pengaturan onReset={() => setState(SIADP.resetSimulation())}/>,
+});
+  </script>
+</body>
+</html>

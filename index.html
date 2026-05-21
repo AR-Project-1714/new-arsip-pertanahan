@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <meta name="description" content="SIAP Loktuan — Sistem Arsip Digital Pertanahan Kelurahan Loktuan.">
+  <title>SIAP Loktuan — Dashboard</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
+  <link rel="stylesheet" href="assets/styles.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="assets/store.js"></script>
+  <script type="text/babel" src="assets/components.js"></script>
+  <script type="text/babel" src="assets/app.js"></script>
+
+  <script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+function Dashboard({ state, go }) {
+  const totalParcels = state.parcels.length;
+  const totalArchives = state.archives.length;
+  const docCount = state.archives.reduce((s, a) => s + (a.dokumen?.length || 0), 0);
+  const completeness = Math.min(100, Math.round(
+    (state.archives.filter((a) => (a.dokumen?.length || 0) >= 5).length / Math.max(1, state.archives.length)) * 100
+  ));
+  const recent = [...state.archives]
+    .sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal))
+    .slice(0, 10);
+
+  const byStatus = state.parcels.reduce((m, p) => ((m[p.status] = (m[p.status] || 0) + 1), m), {});
+
+  const checks = [
+    { ok: true, t: "Backup harian terakhir berhasil", s: "Sabtu, 10 Mei 2026 — 03:00 WITA" },
+    { ok: true, t: "NIK dimask di semua tampilan operator", s: "Otomatis 4 digit awal & akhir" },
+    { ok: completeness >= 80, t: "Kelengkapan dokumen bulan ini", s: `${completeness}% arsip lengkap dokumen wajib` },
+    { ok: state.audits.length > 0, t: "Audit log append-only aktif", s: `${state.audits.length} aksi tercatat` },
+  ];
+
+  return (
+    <div data-screen-label="Dashboard">
+      <div className="hero">
+        <div>
+          <Badge variant="primary" style={{ background: "oklch(100% 0 0 / 0.2)", color: "white", border: "0" }}>
+            <span className="dot" style={{ background: "oklch(80% 0.12 155)" }}/> Sistem aktif
+          </Badge>
+          <h2 style={{ marginTop: 12 }}>Selamat datang, Operator 01</h2>
+          <p>Sistem Arsip Digital Pertanahan Kelurahan Loktuan. Pantau peralihan, arsipkan SPPHT, dan jaga akurasi data surat tanah warga.</p>
+          <div className="cta-row">
+            <Btn variant="primary" icon="plus" onClick={() => go("arsip-baru")}>Mulai Arsip Baru</Btn>
+            <Btn variant="ghost" icon="archive" onClick={() => go("arsip-sppht")}>Arsip SPPHT</Btn>
+            <Btn variant="ghost" icon="land" onClick={() => go("data-tanah")}>Data Tanah</Btn>
+          </div>
+        </div>
+        <div className="completeness">
+          <div className="label">Kelengkapan arsip bulan ini</div>
+          <div className="pct">{completeness}%</div>
+          <div className="bar"><div style={{ width: completeness + "%" }}/></div>
+          <div className="sub">{state.archives.filter((a) => (a.dokumen?.length || 0) >= 5).length} dari {state.archives.length} arsip telah memenuhi dokumen wajib minimal.</div>
+        </div>
+      </div>
+
+      <div className="grid-4" style={{ marginTop: 22 }}>
+        <div className="stat">
+          <div className="ico-wrap"><Icon name="land" size={20}/></div>
+          <div className="label">Total Surat Tanah</div>
+          <div className="value">{totalParcels}</div>
+          <div className="delta">+2 minggu ini</div>
+        </div>
+        <div className="stat">
+          <div className="ico-wrap amber"><Icon name="archive" size={20}/></div>
+          <div className="label">Total Peralihan</div>
+          <div className="value">{totalArchives}</div>
+          <div className="delta">+1 minggu ini</div>
+        </div>
+        <div className="stat">
+          <div className="ico-wrap green"><Icon name="file-text" size={20}/></div>
+          <div className="label">Dokumen Scan</div>
+          <div className="value">{docCount}</div>
+          <div className="delta">{Math.round(docCount / Math.max(1, totalArchives) * 10) / 10} rata-rata per arsip</div>
+        </div>
+        <div className="stat">
+          <div className="ico-wrap blue"><Icon name="trending" size={20}/></div>
+          <div className="label">Rata-rata Temu Kembali</div>
+          <div className="value">2.4<span style={{ fontSize: 16, color: "var(--ink-3)", fontWeight: 500 }}> dtk</span></div>
+          <div className="delta">−0.6 dtk vs. bulan lalu</div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 16, marginTop: 16 }}>
+        <div className="card">
+          <div className="card-head">
+            <div style={{ flex: 1 }}>
+              <h3>10 Arsip Terbaru</h3>
+              <div className="sub">Diurutkan berdasarkan tanggal peralihan</div>
+            </div>
+            <Btn size="sm" variant="subtle" icon="open" onClick={() => go("arsip-sppht")}>Buka daftar</Btn>
+          </div>
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Nomor SPPHT</th>
+                  <th>Surat Tanah</th>
+                  <th>Pemilik baru</th>
+                  <th>Jenis</th>
+                  <th>Tanggal</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((a) => {
+                  const p = state.parcels.find((p) => p.id === a.parcelId);
+                  return (
+                    <tr key={a.id} onClick={() => go("detail", a.parcelId)} style={{ cursor: "pointer" }}>
+                      <td className="mono">{a.nomorSPPHT}</td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{p?.kode || "—"}</div>
+                        <div style={{ color: "var(--ink-3)", fontSize: 11.5 }}>{p?.alamat?.slice(0, 36)}{p?.alamat?.length > 36 ? "…" : ""}</div>
+                      </td>
+                      <td>{a.penerima.nama}</td>
+                      <td><Badge variant={a.jenis === "Waris" ? "info" : a.jenis === "Hibah" ? "warning" : "primary"}>{a.jenis}</Badge></td>
+                      <td>{SIADP.formatDate(a.tanggal)}</td>
+                      <td><StatusBadge status={a.status}/></td>
+                    </tr>
+                  );
+                })}
+                {recent.length === 0 && <EmptyRow cols={6} title="Belum ada arsip" sub="Buat arsip baru untuk mulai mengisi data."/>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card card-pad">
+          <h3 style={{ margin: 0, fontSize: 15 }}>Checklist Pengamanan Sistem</h3>
+          <div style={{ color: "var(--ink-3)", fontSize: 12.5, marginTop: 4 }}>Status indikator integritas data & keamanan operasional.</div>
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+            {checks.map((c, i) => (
+              <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 12px", borderRadius: 10, background: c.ok ? "var(--success-soft)" : "var(--warning-soft)" }}>
+                <div style={{ flex: "none", marginTop: 1, color: c.ok ? "var(--success)" : "var(--warning)" }}>
+                  <Icon name={c.ok ? "check-circle" : "alert"} size={18}/>
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{c.t}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>{c.s}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="divider"/>
+          <div style={{ fontSize: 12, color: "var(--ink-3)" }}>Distribusi status surat tanah</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <Badge variant="success">Terarsip · {byStatus.terarsip || 0}</Badge>
+            <Badge variant="warning">Draft · {byStatus.draft || 0}</Badge>
+            <Badge variant="danger">Sengketa · {byStatus.sengketa || 0}</Badge>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+mountPage({
+  active: "dashboard",
+  render: ({ state }) => <Dashboard state={state} go={go}/>,
+});
+  </script>
+</body>
+</html>

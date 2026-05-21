@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <meta name="description" content="SIAP Loktuan — Arsip Baru.">
+  <title>SIAP Loktuan — Arsip Baru</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
+  <link rel="stylesheet" href="assets/styles.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="assets/store.js"></script>
+  <script type="text/babel" src="assets/components.js"></script>
+  <script type="text/babel" src="assets/app.js"></script>
+
+  <script type="text/babel">
+const DOCS_WAJIB = [
+  { key: "SPPHT", wajib: true },
+  { key: "KTP pemohon", wajib: true },
+  { key: "KK pemohon", wajib: true },
+  { key: "Surat pengantar RT/RW", wajib: true },
+  { key: "Surat tidak sengketa", wajib: true },
+];
+const DOCS_OPSIONAL = [
+  { key: "KTP saksi 1", wajib: false },
+  { key: "KTP saksi 2", wajib: false },
+  { key: "Denah lokasi", wajib: false },
+  { key: "Dokumen tambahan", wajib: false },
+];
+
+function ArsipBaru({ state, setState, go, initialParcelId }) {
+  const toast = useToast();
+  const [step, setStep] = React.useState(0);
+  const [form, setForm] = React.useState({
+    parcelId: initialParcelId || "",
+    pengalih: { nama: "", nik: "", tempatLahir: "", tanggalLahir: "", pekerjaan: "", noHp: "", alamat: "", status: "hidup", peran: "pemilik" },
+    penerima: { nama: "", nik: "", tempatLahir: "", tanggalLahir: "", pekerjaan: "", noHp: "", alamat: "" },
+    jenis: "Jual Beli",
+    tanggal: new Date().toISOString().slice(0, 10),
+    nomorSPPHT: "",
+    nomorAkta: "",
+    catatan: "",
+    rekonstruksi: false,
+    dokumen: {},
+  });
+
+  React.useEffect(() => {
+    if (!form.parcelId) return;
+    const p = state.parcels.find((x) => x.id === form.parcelId);
+    if (p && !form.pengalih.nama) {
+      setForm((f) => ({ ...f, pengalih: { ...f.pengalih, nama: p.pemilikSaatIni } }));
+    }
+    if (p && !form.penerima.alamat) {
+      setForm((f) => ({ ...f, penerima: { ...f.penerima, alamat: p.alamat } }));
+    }
+  }, [form.parcelId]);
+
+  React.useEffect(() => {
+    if (form.parcelId && form.tanggal && !form.nomorSPPHTTouched) {
+      const yearArchives = state.archives.filter((a) => new Date(a.tanggal).getFullYear() === new Date(form.tanggal).getFullYear());
+      const seq = String(yearArchives.length + 1).padStart(3, "0");
+      const month = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"][new Date(form.tanggal).getMonth()];
+      setForm((f) => ({ ...f, nomorSPPHT: `SPPHT/${seq}/${month}/${new Date(form.tanggal).getFullYear()}` }));
+    }
+  }, [form.parcelId, form.tanggal]);
+
+  const selectedParcel = state.parcels.find((p) => p.id === form.parcelId);
+
+  const chainIssue = React.useMemo(() => {
+    if (!selectedParcel) return null;
+    if (form.rekonstruksi) return null;
+    if (form.pengalih.nama && form.pengalih.nama.trim().toLowerCase() !== selectedParcel.pemilikSaatIni.toLowerCase()) {
+      return `Pengalih harus cocok dengan pemilik terakhir surat tanah: "${selectedParcel.pemilikSaatIni}". Aktifkan rekonstruksi historis bila ini peralihan masa lampau.`;
+    }
+    return null;
+  }, [selectedParcel, form.pengalih.nama, form.rekonstruksi]);
+
+  const steps = [
+    { label: "Surat Tanah", desc: "Pilih surat tanah terdaftar", icon: "land" },
+    { label: "Pihak", desc: "Pengalih & penerima", icon: "users" },
+    { label: "Peralihan", desc: "Jenis & tanggal", icon: "stack" },
+    { label: "Dokumen", desc: "Upload bukti", icon: "file-text" },
+    { label: "Review", desc: "Periksa & simpan", icon: "check-circle" },
+  ];
+
+  const docMandatory = DOCS_WAJIB.every((d) => form.dokumen[d.key]?.uploaded);
+
+  const canNext = (s) => {
+    if (s === 0) return !!form.parcelId;
+    if (s === 1) return !!form.pengalih.nama && !!form.penerima.nama && !!form.penerima.nik && !chainIssue;
+    if (s === 2) return !!form.jenis && !!form.tanggal && !!form.nomorSPPHT;
+    if (s === 3) return docMandatory;
+    return true;
+  };
+
+  const goNext = () => {
+    if (!canNext(step)) { toast.error("Belum bisa lanjut", "Lengkapi field wajib pada langkah ini."); return; }
+    setStep((s) => Math.min(steps.length - 1, s + 1));
+  };
+  const goBack = () => setStep((s) => Math.max(0, s - 1));
+
+  const saveDraft = () => {
+    setState({ ...state, draft: { ...form, savedAt: new Date().toISOString() } });
+    toast.success("Draft tersimpan", "Lanjutkan kapan saja dari halaman Arsip Baru.");
+  };
+
+  const resetWizard = () => {
+    setForm({
+      parcelId: "",
+      pengalih: { nama: "", nik: "", tempatLahir: "", tanggalLahir: "", pekerjaan: "", noHp: "", alamat: "", status: "hidup", peran: "pemilik" },
+      penerima: { nama: "", nik: "", tempatLahir: "", tanggalLahir: "", pekerjaan: "", noHp: "", alamat: "" },
+      jenis: "Jual Beli",
+      tanggal: new Date().toISOString().slice(0, 10),
+      nomorSPPHT: "", nomorAkta: "", catatan: "", rekonstruksi: false, dokumen: {},
+    });
+    setStep(0);
+    toast.warn("Wizard direset", "Semua input dikosongkan.");
+  };
+
+  const simpanArsip = () => {
+    if (!docMandatory) { toast.error("Dokumen wajib belum lengkap"); return; }
+    if (chainIssue) { toast.error("Chain of title belum konsisten"); return; }
+    const id = "a-" + Date.now();
+    const archive = {
+      id,
+      parcelId: form.parcelId,
+      nomorSPPHT: form.nomorSPPHT,
+      jenis: form.jenis,
+      tanggal: new Date(form.tanggal).toISOString(),
+      pengalih: { ...form.pengalih },
+      penerima: { ...form.penerima },
+      nomorAkta: form.nomorAkta || "—",
+      catatan: form.catatan,
+      dokumen: Object.keys(form.dokumen).filter((k) => form.dokumen[k]?.uploaded),
+      status: "terarsip",
+      rekonstruksi: form.rekonstruksi,
+    };
+
+    const newParties = [];
+    const findOrAdd = (nama, nik, status, peran) => {
+      if (!nama) return;
+      const exists = state.parties.find((pt) => (nik && pt.nik === nik) || pt.nama === nama);
+      if (exists) { exists.riwayatTerakhir = archive.tanggal; exists.keterlibatan = peran; return; }
+      newParties.push({
+        id: "pt-" + Date.now() + Math.random().toString(36).slice(2, 5),
+        nama, nik: nik || "—", status: status || "hidup", keterlibatan: peran,
+        riwayatTerakhir: archive.tanggal,
+      });
+    };
+    findOrAdd(form.pengalih.nama, form.pengalih.nik, form.pengalih.status, "pengalih");
+    findOrAdd(form.penerima.nama, form.penerima.nik, "hidup", "penerima");
+
+    const updatedParcels = state.parcels.map((p) =>
+      p.id === form.parcelId ? { ...p, pemilikSaatIni: form.penerima.nama, status: "terarsip" } : p
+    );
+
+    setState({
+      ...state,
+      parcels: updatedParcels,
+      archives: [archive, ...state.archives],
+      parties: [...state.parties, ...newParties],
+      audits: [{
+        id: "au-" + Date.now(),
+        waktu: new Date().toISOString(),
+        admin: "operator01", aksi: "CREATE", entitas: "peralihan",
+        entId: id, ip: "10.0.12.45",
+      }, ...state.audits],
+      draft: null,
+    });
+    toast.success("Arsip SPPHT tersimpan", `${form.nomorSPPHT} berhasil diarsipkan`);
+    setTimeout(() => go("detail", form.parcelId), 600);
+  };
+
+  return (
+    <div data-screen-label="Arsip Baru" className="wizard">
+      <div className="stepper">
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Wizard arsip baru</div>
+        {steps.map((s, i) => (
+          <div key={i} className={"step " + (i === step ? "active" : i < step ? "done" : "")} onClick={() => i <= step && setStep(i)} style={{ cursor: i <= step ? "pointer" : "default" }}>
+            <div className="num">{i < step ? <Icon name="check" size={14}/> : i + 1}</div>
+            <div style={{ flex: 1 }}>
+              <div className="label">{s.label}</div>
+              <div className="desc">{s.desc}</div>
+            </div>
+          </div>
+        ))}
+        <div className="divider"/>
+        <Btn size="sm" variant="ghost" icon="refresh" onClick={resetWizard} style={{ width: "100%", justifyContent: "center" }}>Reset Wizard</Btn>
+        {state.draft && (
+          <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: "var(--warning-soft)", fontSize: 11.5, color: "oklch(40% 0.1 78)" }}>
+            <b>Draft tersimpan</b><br/>
+            <span style={{ opacity: 0.85 }}>{SIADP.relTime(state.draft.savedAt)}</span>
+          </div>
+        )}
+      </div>
+
+      <div>
+        {step === 0 && <StepPersil state={state} form={form} setForm={setForm} go={go}/>}
+        {step === 1 && <StepPihak state={state} form={form} setForm={setForm} chainIssue={chainIssue}/>}
+        {step === 2 && <StepPeralihan form={form} setForm={setForm}/>}
+        {step === 3 && <StepDokumen form={form} setForm={setForm}/>}
+        {step === 4 && <StepReview state={state} form={form}/>}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center" }}>
+          <Btn variant="ghost" icon="chevron-left" onClick={goBack} disabled={step === 0}>Kembali</Btn>
+          <div style={{ flex: 1 }}/>
+          <Btn variant="subtle" icon="save" onClick={saveDraft}>Simpan Draft</Btn>
+          {step < steps.length - 1 ? (
+            <Btn variant="primary" onClick={goNext}>Lanjut <Icon name="chevron-right" size={16}/></Btn>
+          ) : (
+            <Btn variant="primary" icon="check" onClick={simpanArsip} disabled={!docMandatory || !!chainIssue}>Simpan Arsip</Btn>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StepPersil({ state, form, setForm, go }) {
+  const [q, setQ] = React.useState("");
+  const selected = state.parcels.find((p) => p.id === form.parcelId);
+  const results = q
+    ? state.parcels.filter((p) =>
+        [p.kode, p.nop, p.nomorSurat, p.alamat, p.pemilikSaatIni, `${p.rt}/${p.rw}`].join(" ").toLowerCase().includes(q.toLowerCase())
+      ).slice(0, 6)
+    : [];
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div style={{ flex: 1 }}>
+          <h3>1. Pilih surat tanah terdaftar</h3>
+          <div className="sub">Wizard hanya membuat arsip atas surat tanah yang sudah ada. Surat tanah baru dibuat dari halaman Data Tanah.</div>
+        </div>
+      </div>
+      <div className="card-pad">
+        <Field label="Cari surat tanah" hint="Cari berdasar nomor surat tanah, NOP, alamat, atau nama pemilik">
+          <div className="search-input">
+            <Icon name="search" size={16}/>
+            <input placeholder="Mulai mengetik nomor surat tanah atau alamat…" value={q} onChange={(e) => setQ(e.target.value)}/>
+          </div>
+        </Field>
+        {q && (
+          <div style={{ marginTop: 10, border: "1px solid var(--line)", borderRadius: 10, maxHeight: 240, overflowY: "auto", background: "var(--surface)" }}>
+            {results.length === 0 && <div style={{ padding: 14, color: "var(--ink-3)", fontSize: 13 }}>Tidak ada surat tanah yang cocok.</div>}
+            {results.map((p) => (
+              <div key={p.id}
+                onClick={() => { setForm((f) => ({ ...f, parcelId: p.id })); setQ(""); }}
+                style={{ padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid var(--line)", display: "flex", gap: 12, alignItems: "center" }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-soft)"}
+                onMouseLeave={(e) => e.currentTarget.style.background = ""}
+              >
+                <Icon name="land" size={18}/>
+                <div style={{ flex: 1 }}>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{p.kode}</div>
+                  <div style={{ fontSize: 12.5, color: "var(--ink-2)" }}>{p.alamat} · RT {p.rt}/{p.rw}</div>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--ink-3)" }}>{p.pemilikSaatIni}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {selected && (
+          <div style={{ marginTop: 18, padding: 16, border: "1px solid var(--primary-soft)", background: "var(--primary-soft)", borderRadius: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--primary)", color: "white", display: "grid", placeItems: "center" }}>
+                <Icon name="check" size={18}/>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: "var(--primary-ink)" }}>{selected.kode}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{selected.alamat}</div>
+                <div style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 2 }}>Nomor Surat {selected.nomorSurat} · RT {selected.rt}/{selected.rw} · {selected.luas} m²</div>
+              </div>
+              <StatusBadge status={selected.status}/>
+              <Btn size="sm" variant="ghost" icon="x" onClick={() => setForm((f) => ({ ...f, parcelId: "" }))}>Ganti</Btn>
+            </div>
+            <div className="grid-3" style={{ marginTop: 14, gap: 10 }}>
+              <div style={{ padding: 10, background: "white", borderRadius: 8 }}>
+                <div style={{ fontSize: 10.5, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Pemilik terakhir</div>
+                <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>{selected.pemilikSaatIni}</div>
+              </div>
+              <div style={{ padding: 10, background: "white", borderRadius: 8 }}>
+                <div style={{ fontSize: 10.5, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Luas tanah</div>
+                <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>{selected.luas} m²</div>
+              </div>
+              <div style={{ padding: 10, background: "white", borderRadius: 8 }}>
+                <div style={{ fontSize: 10.5, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Tanggal pendaftaran</div>
+                <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>{SIADP.formatDate(selected.tanggalDaftar)}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!selected && !q && (
+          <div style={{ marginTop: 14, display: "flex", gap: 12, padding: 14, background: "var(--info-soft)", borderRadius: 10 }}>
+            <Icon name="info" size={18} className="ico" style={{ color: "var(--info)" }}/>
+            <div style={{ fontSize: 12.5, color: "var(--ink-2)" }}>
+              Surat tanah baru? <a onClick={() => go("data-tanah")} style={{ color: "var(--primary-ink)", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>Daftarkan di Data Tanah</a> terlebih dahulu, lalu kembali ke wizard ini.
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PartyFields({ data, set, prefix, accent }) {
+  return (
+    <div className="col">
+      <Field label={`Nama ${prefix}`} required>
+        <input className="input" placeholder="Nama lengkap" value={data.nama} onChange={(e) => set("nama", e.target.value)}/>
+      </Field>
+      <Field label={`NIK ${prefix}`} hint="16 digit, akan dimask saat ditampilkan">
+        <input className="input mono" placeholder="6471010101700001" value={data.nik} onChange={(e) => set("nik", e.target.value.replace(/\D/g, "").slice(0, 16))}/>
+      </Field>
+      <div className="grid-2">
+        <Field label="Tempat lahir">
+          <input className="input" placeholder="Bontang" value={data.tempatLahir} onChange={(e) => set("tempatLahir", e.target.value)}/>
+        </Field>
+        <Field label="Tanggal lahir">
+          <DatePicker value={data.tanggalLahir} onChange={(v) => set("tanggalLahir", v)} placeholder="Pilih tanggal"/>
+        </Field>
+      </div>
+      <Field label="Pekerjaan">
+        <input className="input" placeholder="Wiraswasta" value={data.pekerjaan} onChange={(e) => set("pekerjaan", e.target.value)}/>
+      </Field>
+      <Field label="No HP">
+        <input className="input mono" placeholder="0851-0123-5412" value={data.noHp} onChange={(e) => set("noHp", e.target.value)}/>
+      </Field>
+      <Field label="Alamat">
+        <textarea className="textarea" rows={2} placeholder="Alamat sesuai KTP" value={data.alamat} onChange={(e) => set("alamat", e.target.value)}/>
+      </Field>
+    </div>
+  );
+}
+
+function StepPihak({ state, form, setForm, chainIssue }) {
+  const setP = (k, v) => setForm((f) => ({ ...f, pengalih: { ...f.pengalih, [k]: v } }));
+  const setR = (k, v) => setForm((f) => ({ ...f, penerima: { ...f.penerima, [k]: v } }));
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div style={{ flex: 1 }}>
+          <h3>2. Pihak pengalih & penerima</h3>
+          <div className="sub">Pengalih harus cocok dengan pemilik terakhir untuk menjaga chain of title.</div>
+        </div>
+        <label className="check">
+          <input type="checkbox" checked={form.rekonstruksi} onChange={(e) => setForm((f) => ({ ...f, rekonstruksi: e.target.checked }))}/>
+          Rekonstruksi historis
+        </label>
+      </div>
+      <div className="card-pad">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div style={{ padding: 16, background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-2)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+              <Icon name="user" size={14}/> Pengalih
+            </div>
+            <PartyFields data={form.pengalih} set={setP} prefix="pengalih"/>
+          </div>
+
+          <div style={{ padding: 16, background: "var(--primary-soft)", border: "1px solid transparent", borderRadius: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primary-ink)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+              <Icon name="user" size={14}/> Penerima
+            </div>
+            <PartyFields data={form.penerima} set={setR} prefix="penerima"/>
+          </div>
+        </div>
+
+        {chainIssue && (
+          <div style={{ marginTop: 14, padding: 14, borderRadius: 10, background: "var(--danger-soft)", border: "1px solid oklch(85% 0.08 27)", display: "flex", gap: 12 }}>
+            <Icon name="alert" size={18} style={{ color: "var(--danger)", flex: "none", marginTop: 1 }}/>
+            <div style={{ fontSize: 12.5, color: "oklch(38% 0.13 27)" }}>
+              <b>Chain of title tidak konsisten.</b> {chainIssue}
+            </div>
+          </div>
+        )}
+        {!chainIssue && form.pengalih.nama && (
+          <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "var(--success-soft)", display: "flex", gap: 10 }}>
+            <Icon name="check-circle" size={18} style={{ color: "var(--success)", flex: "none", marginTop: 1 }}/>
+            <div style={{ fontSize: 12.5, color: "var(--success)" }}>Chain of title konsisten dengan data master surat tanah.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StepPeralihan({ form, setForm }) {
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div style={{ flex: 1 }}>
+          <h3>3. Data peralihan</h3>
+          <div className="sub">Tetapkan jenis, tanggal, nomor SPPHT, dan keterangan tambahan.</div>
+        </div>
+      </div>
+      <div className="card-pad">
+        <div className="grid-2">
+          <Field label="Jenis peralihan" required>
+            <Select value={form.jenis} onChange={(v) => setForm((f) => ({ ...f, jenis: v }))}
+              options={["Jual Beli","Waris","Hibah","Tukar Menukar","Pelepasan Hak"]}/>
+          </Field>
+          <Field label="Tanggal peristiwa" required>
+            <DatePicker value={form.tanggal} onChange={(v) => setForm((f) => ({ ...f, tanggal: v }))} placeholder="Pilih tanggal peristiwa"/>
+          </Field>
+          <Field label="Nomor SPPHT" required hint="Diisi otomatis, bisa diubah">
+            <input className="input mono" value={form.nomorSPPHT} onChange={(e) => setForm((f) => ({ ...f, nomorSPPHT: e.target.value, nomorSPPHTTouched: true }))}/>
+          </Field>
+          <Field label="Nomor akta PPAT" hint="Wajib untuk jual beli, opsional untuk waris">
+            <input className="input mono" placeholder="12/2026/PPAT-LKT" value={form.nomorAkta} onChange={(e) => setForm((f) => ({ ...f, nomorAkta: e.target.value }))}/>
+          </Field>
+        </div>
+        <Field label="Catatan tambahan" hint="Konteks atau alasan peralihan (opsional)" style={{ marginTop: 14 }}>
+          <textarea className="textarea" rows={3} value={form.catatan} onChange={(e) => setForm((f) => ({ ...f, catatan: e.target.value }))} placeholder="Mis. peralihan antar keluarga, kondisi sengketa sebelumnya, dll."/>
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+function StepDokumen({ form, setForm }) {
+  const toast = useToast();
+  const simulateUpload = (key) => {
+    setForm((f) => ({ ...f, dokumen: { ...f.dokumen, [key]: { uploaded: false, progress: 0 } } }));
+    let p = 0;
+    const tick = () => {
+      p += 14 + Math.floor(Math.random() * 18);
+      if (p >= 100) {
+        setForm((f) => ({ ...f, dokumen: { ...f.dokumen, [key]: { uploaded: true, progress: 100 } } }));
+        toast.success("Dokumen ter-upload", key);
+        return;
+      }
+      setForm((f) => ({ ...f, dokumen: { ...f.dokumen, [key]: { uploaded: false, progress: p } } }));
+      setTimeout(tick, 220);
+    };
+    setTimeout(tick, 200);
+  };
+
+  const removeDoc = (key) => {
+    setForm((f) => { const next = { ...f.dokumen }; delete next[key]; return { ...f, dokumen: next }; });
+  };
+
+  const wajibCount = DOCS_WAJIB.filter((d) => form.dokumen[d.key]?.uploaded).length;
+  const wajibTotal = DOCS_WAJIB.length;
+
+  const renderRow = (d) => {
+    const st = form.dokumen[d.key];
+    const inProgress = st && !st.uploaded && st.progress != null;
+    const done = st?.uploaded;
+    return (
+      <div key={d.key} className={"upload-row " + (done ? "done" : "")}>
+        <div className="file-ico"><Icon name={done ? "check" : "file-text"} size={18}/></div>
+        <div className="meta">
+          <div className="name">{d.key} {d.wajib && <span style={{ color: "var(--danger)" }}>*</span>}</div>
+          <div className="sub">
+            {done ? `Terverifikasi · scan_${d.key.toLowerCase().replace(/[^a-z0-9]+/g, "_")}.pdf` :
+              inProgress ? <span>Mengunggah… {Math.round(st.progress)}%</span> :
+              d.wajib ? "Belum diunggah · dokumen wajib" : "Belum diunggah · opsional"}
+          </div>
+          {inProgress && <div style={{ marginTop: 6 }}><ProgressBar value={st.progress} height={6}/></div>}
+        </div>
+        {done ? (
+          <Btn size="sm" variant="ghost" icon="trash" onClick={() => removeDoc(d.key)}>Hapus</Btn>
+        ) : (
+          <Btn size="sm" variant={d.wajib ? "primary" : "subtle"} icon="upload" onClick={() => simulateUpload(d.key)} disabled={inProgress}>Upload</Btn>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div style={{ flex: 1 }}>
+          <h3>4. Upload dokumen pendukung</h3>
+          <div className="sub">Upload bersifat simulasi pada prototype. Status kelengkapan diperbarui otomatis.</div>
+        </div>
+        <Badge variant={wajibCount === wajibTotal ? "success" : "warning"}>{wajibCount}/{wajibTotal} wajib lengkap</Badge>
+      </div>
+      <div className="card-pad">
+        <div className="section-label">Dokumen wajib</div>
+        <div>{DOCS_WAJIB.map(renderRow)}</div>
+        <div className="section-label" style={{ marginTop: 22 }}>Dokumen opsional</div>
+        <div>{DOCS_OPSIONAL.map(renderRow)}</div>
+      </div>
+    </div>
+  );
+}
+
+function StepReview({ state, form }) {
+  const p = state.parcels.find((x) => x.id === form.parcelId);
+  const dokumenList = Object.keys(form.dokumen).filter((k) => form.dokumen[k]?.uploaded);
+  const allMandatory = DOCS_WAJIB.every((d) => form.dokumen[d.key]?.uploaded);
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div style={{ flex: 1 }}>
+          <h3>5. Review sebelum simpan</h3>
+          <div className="sub">Periksa rangkuman di bawah. Tekan <b>Simpan Arsip</b> untuk mengarsipkan SPPHT ini.</div>
+        </div>
+        <Badge variant={allMandatory ? "success" : "danger"}>{allMandatory ? "Siap simpan" : "Dokumen wajib belum lengkap"}</Badge>
+      </div>
+      <div className="card-pad">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <SummaryBox title="Surat Tanah">
+            <dl className="kv">
+              <dt>Nomor surat tanah</dt><dd className="mono">{p?.kode}</dd>
+              <dt>Nomor surat</dt><dd className="mono" style={{ fontSize: 12 }}>{p?.nomorSurat}</dd>
+              <dt>Alamat</dt><dd>{p?.alamat}</dd>
+              <dt>RT/RW</dt><dd>{p?.rt}/{p?.rw}</dd>
+              <dt>Luas</dt><dd>{p?.luas} m²</dd>
+            </dl>
+          </SummaryBox>
+          <SummaryBox title="Peralihan">
+            <dl className="kv">
+              <dt>Jenis</dt><dd>{form.jenis}{form.rekonstruksi && <Badge variant="warning" style={{ marginLeft: 6 }}>Rekonstruksi</Badge>}</dd>
+              <dt>Tanggal</dt><dd>{SIADP.formatDate(new Date(form.tanggal).toISOString())}</dd>
+              <dt>Nomor SPPHT</dt><dd className="mono">{form.nomorSPPHT}</dd>
+              <dt>Nomor akta</dt><dd className="mono">{form.nomorAkta || "—"}</dd>
+              <dt>Catatan</dt><dd>{form.catatan || "—"}</dd>
+            </dl>
+          </SummaryBox>
+          <SummaryBox title="Pengalih">
+            <dl className="kv">
+              <dt>Nama</dt><dd>{form.pengalih.nama || "—"}</dd>
+              <dt>NIK</dt><dd className="mono">{SIADP.maskNik(form.pengalih.nik)}</dd>
+              <dt>Tempat/tgl lahir</dt><dd>{[form.pengalih.tempatLahir, form.pengalih.tanggalLahir ? SIADP.formatDate(form.pengalih.tanggalLahir) : ""].filter(Boolean).join(", ") || "—"}</dd>
+              <dt>Pekerjaan</dt><dd>{form.pengalih.pekerjaan || "—"}</dd>
+              <dt>No HP</dt><dd className="mono">{form.pengalih.noHp || "—"}</dd>
+              <dt>Alamat</dt><dd>{form.pengalih.alamat || "—"}</dd>
+            </dl>
+          </SummaryBox>
+          <SummaryBox title="Penerima">
+            <dl className="kv">
+              <dt>Nama</dt><dd>{form.penerima.nama || "—"}</dd>
+              <dt>NIK</dt><dd className="mono">{SIADP.maskNik(form.penerima.nik)}</dd>
+              <dt>Tempat/tgl lahir</dt><dd>{[form.penerima.tempatLahir, form.penerima.tanggalLahir ? SIADP.formatDate(form.penerima.tanggalLahir) : ""].filter(Boolean).join(", ") || "—"}</dd>
+              <dt>Pekerjaan</dt><dd>{form.penerima.pekerjaan || "—"}</dd>
+              <dt>No HP</dt><dd className="mono">{form.penerima.noHp || "—"}</dd>
+              <dt>Alamat</dt><dd>{form.penerima.alamat || "—"}</dd>
+            </dl>
+          </SummaryBox>
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <SummaryBox title={`Dokumen terunggah (${dokumenList.length})`}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {dokumenList.length === 0 && <div style={{ color: "var(--ink-3)", fontSize: 12.5 }}>Belum ada dokumen.</div>}
+              {dokumenList.map((d) => <Badge key={d} variant="success">{d}</Badge>)}
+            </div>
+          </SummaryBox>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryBox({ title, children }) {
+  return (
+    <div style={{ padding: 14, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2)" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+mountPage({
+  active: "arsip-baru",
+  render: ({ state, setState }) => <ArsipBaru state={state} setState={setState} go={go} initialParcelId={getParam("parcel")}/>,
+});
+  </script>
+</body>
+</html>

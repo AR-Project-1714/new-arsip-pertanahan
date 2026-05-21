@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <meta name="description" content="SIAP Loktuan — Data Pihak.">
+  <title>SIAP Loktuan — Data Pihak</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
+  <link rel="stylesheet" href="assets/styles.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="assets/store.js"></script>
+  <script type="text/babel" src="assets/components.js"></script>
+  <script type="text/babel" src="assets/app.js"></script>
+
+  <script type="text/babel">
+function DataPihak({ state }) {
+  const toast = useToast();
+  return (
+    <div data-screen-label="Data Pihak">
+      <div className="card">
+        <div className="card-head">
+          <div style={{ flex: 1 }}>
+            <h3>Data Pihak</h3>
+            <div className="sub">Daftar pengalih, penerima, dan pemilik yang terdaftar dalam arsip.</div>
+          </div>
+          <Btn variant="ghost" icon="plus" onClick={() => toast.info("Pihak baru", "Pihak akan otomatis bertambah ketika arsip baru disimpan.")}>Tambah Pihak</Btn>
+        </div>
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Nama</th>
+                <th>NIK</th>
+                <th>Status</th>
+                <th>Keterlibatan</th>
+                <th>Riwayat terakhir</th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.parties.length === 0 && <EmptyRow cols={5} icon="users" title="Belum ada pihak terdaftar"/>}
+              {state.parties.map((pt) => (
+                <tr key={pt.id}>
+                  <td>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--bg-soft)", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700, color: "var(--ink-2)" }}>
+                        {pt.nama.split(" ").map((s) => s[0]).slice(0, 2).join("")}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{pt.nama}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="mono">{SIADP.maskNik(pt.nik)}</td>
+                  <td><StatusBadge status={pt.status}/></td>
+                  <td><Badge variant="muted">{pt.keterlibatan}</Badge></td>
+                  <td>{SIADP.relTime(pt.riwayatTerakhir)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+mountPage({
+  active: "data-pihak",
+  render: ({ state }) => <DataPihak state={state}/>,
+});
+  </script>
+</body>
+</html>

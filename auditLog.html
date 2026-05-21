@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <meta name="description" content="SIAP Loktuan — Audit Log.">
+  <title>SIAP Loktuan — Audit Log</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
+  <link rel="stylesheet" href="assets/styles.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="assets/store.js"></script>
+  <script type="text/babel" src="assets/components.js"></script>
+  <script type="text/babel" src="assets/app.js"></script>
+
+  <script type="text/babel">
+const { useState } = React;
+
+function AuditLog({ state }) {
+  const [aksi, setAksi] = useState("");
+  const filtered = aksi ? state.audits.filter((a) => a.aksi === aksi) : state.audits;
+  const aksiColor = { CREATE: "success", UPDATE: "info", VIEW_FILE: "muted", LOGIN: "primary" };
+  return (
+    <div data-screen-label="Audit Log">
+      <div className="card">
+        <div className="card-head">
+          <div style={{ flex: 1 }}>
+            <h3>Audit Log</h3>
+            <div className="sub">Catatan aktivitas append-only · {state.audits.length} aksi tercatat</div>
+          </div>
+        </div>
+        <div className="filter-bar">
+          <Field label="Aksi">
+            <Select width={190} value={aksi} onChange={setAksi} placeholder="Semua aksi"
+              options={["CREATE","UPDATE","VIEW_FILE","LOGIN"]}/>
+          </Field>
+        </div>
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Waktu</th>
+                <th>Admin</th>
+                <th>Aksi</th>
+                <th>Entitas</th>
+                <th>ID</th>
+                <th>IP address</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && <EmptyRow cols={6} icon="history" title="Tidak ada catatan"/>}
+              {filtered.map((a) => (
+                <tr key={a.id}>
+                  <td>{SIADP.formatDateTime(a.waktu)}</td>
+                  <td>{a.admin}</td>
+                  <td><Badge variant={aksiColor[a.aksi] || "muted"}>{a.aksi}</Badge></td>
+                  <td>{a.entitas}</td>
+                  <td className="mono" style={{ fontSize: 11.5 }}>{a.entId}</td>
+                  <td className="mono" style={{ fontSize: 11.5 }}>{a.ip}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+mountPage({
+  active: "audit-log",
+  render: ({ state }) => <AuditLog state={state}/>,
+});
+  </script>
+</body>
+</html>

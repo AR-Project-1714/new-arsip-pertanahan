@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <meta name="description" content="SIAP Loktuan — Data Tanah.">
+  <title>SIAP Loktuan — Data Tanah</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
+  <link rel="stylesheet" href="assets/styles.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="assets/store.js"></script>
+  <script type="text/babel" src="assets/components.js"></script>
+  <script type="text/babel" src="assets/app.js"></script>
+
+  <script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+const JENIS_SURAT = [
+  "SPPHT",
+  "Surat Keterangan Tanah (SKT)",
+  "Surat Pelepasan Hak (SPH)",
+  "Sporadik",
+  "Akta Hibah",
+  "Surat Keterangan Waris",
+];
+
+function DataTanah({ state, setState, go }) {
+  const [q, setQ] = useState("");
+  const [committedQ, setCommittedQ] = useState("");
+  const [openAdd, setOpenAdd] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
+  const [fStatus, setFStatus] = useState("");
+  const [fRT, setFRT] = useState("");
+  const toast = useToast();
+
+  const filtered = useMemo(() => {
+    const lq = committedQ.trim().toLowerCase();
+    return state.parcels.filter((p) => {
+      if (fStatus && p.status !== fStatus) return false;
+      if (fRT && p.rt !== fRT) return false;
+      if (!lq) return true;
+      const hay = [p.pemilikSaatIni, p.pemilikAwal, p.alamat, p.nama].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(lq);
+    });
+  }, [state.parcels, committedQ, fStatus, fRT]);
+
+  return (
+    <div data-screen-label="Data Tanah">
+      <div className="card">
+        <div className="card-head">
+          <div style={{ flex: 1 }}>
+            <h3>Master Data Surat Tanah</h3>
+            <div className="sub">Pencarian hanya berdasarkan nama pemilik atau alamat lokasi.</div>
+          </div>
+          <Btn variant="ghost" icon="filter" onClick={() => setShowFilter((v) => !v)}>Filter</Btn>
+          <Btn variant="primary" icon="plus" onClick={() => setOpenAdd(true)}>Tambah Surat Tanah</Btn>
+        </div>
+
+        <div className="filter-bar">
+          <Field label="Cari nama pemilik / alamat">
+            <div className="search-input" style={{ width: 420 }}>
+              <Icon name="search" size={16}/>
+              <input
+                placeholder="Contoh: Siti Aminah, Jl. Mayjend Sutoyo…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setCommittedQ(q);
+                    toast.info("Daftar diperbarui", q ? `Kata kunci: "${q}"` : "Semua surat tanah ditampilkan");
+                  }
+                }}
+              />
+            </div>
+          </Field>
+          {showFilter && (
+            <>
+              <Field label="Status">
+                <Select width={150} value={fStatus} onChange={setFStatus} placeholder="Semua"
+                  options={[{value:"terarsip",label:"Terarsip"},{value:"draft",label:"Draft"},{value:"sengketa",label:"Sengketa"}]}/>
+              </Field>
+              <Field label="RT">
+                <Select width={110} value={fRT} onChange={setFRT} placeholder="Semua"
+                  options={[...new Set(state.parcels.map((p) => p.rt))].sort()}/>
+              </Field>
+            </>
+          )}
+          <div style={{ marginLeft: "auto", color: "var(--ink-3)", fontSize: 12 }}>
+            Menampilkan <b style={{ color: "var(--ink-1)" }}>{filtered.length}</b> dari <b style={{ color: "var(--ink-1)" }}>{state.parcels.length}</b> surat tanah
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Nomor Surat Tanah</th>
+                <th>Nomor Surat</th>
+                <th>RT/RW</th>
+                <th>Lokasi</th>
+                <th>Luas</th>
+                <th>Pemilik saat ini</th>
+                <th>Status</th>
+                <th className="col-actions">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && <EmptyRow cols={8} icon="land" title="Surat tanah tidak ditemukan" sub="Coba kata kunci nama pemilik atau alamat yang lain."/>}
+              {filtered.map((p) => (
+                <tr key={p.id}>
+                  <td className="mono">{p.kode}</td>
+                  <td className="mono" style={{ fontSize: 11.5 }}>{p.nomorSurat || "—"}</td>
+                  <td>RT {p.rt}/{p.rw}</td>
+                  <td>{p.alamat}</td>
+                  <td><span style={{ fontWeight: 600 }}>{p.luas}</span> <span style={{ color: "var(--ink-3)" }}>m²</span></td>
+                  <td>{p.pemilikSaatIni}</td>
+                  <td><StatusBadge status={p.status}/></td>
+                  <td className="col-actions">
+                    <Btn size="sm" variant="subtle" icon="open" onClick={() => go("detail", p.id)}>Buka</Btn>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <TambahSuratTanahModal
+        open={openAdd}
+        onClose={() => setOpenAdd(false)}
+        state={state}
+        onSave={(parcel) => {
+          const next = {
+            ...state,
+            parcels: [...state.parcels, parcel],
+            audits: [{
+              id: "au-" + Date.now(),
+              waktu: new Date().toISOString(),
+              admin: "operator01", aksi: "CREATE", entitas: "tanah",
+              entId: parcel.id, ip: "10.0.12.45",
+            }, ...state.audits],
+          };
+          setState(next);
+          setOpenAdd(false);
+          toast.success("Surat tanah tersimpan", `${parcel.kode} ditambahkan ke Data Tanah`);
+        }}
+      />
+    </div>
+  );
+}
+
+function TambahSuratTanahModal({ open, onClose, state, onSave }) {
+  const empty = {
+    nama: "", nomorSurat: "", jenisSurat: "SPPHT",
+    rt: "", rw: "", kode: "", nop: "",
+    alamat: "", kelurahan: "Loktuan", luas: "",
+    pemilikSaatIni: "", status: "terarsip",
+    tanggalDaftar: new Date().toISOString().slice(0, 10),
+    suratUploaded: false,
+    batas: { utara: "", selatan: "", timur: "", barat: "" },
+  };
+  const [form, setForm] = useState(empty);
+  const [errors, setErrors] = useState({});
+  const toast = useToast();
+
+  useEffect(() => {
+    if (!open) return;
+    if (form.rt && form.rw && !form.kodeTouched) {
+      const next = SIADP.nextParcelKode(state.parcels, form.rt, form.rw);
+      setForm((f) => ({ ...f, kode: next }));
+    }
+  }, [form.rt, form.rw, open]);
+
+  useEffect(() => {
+    if (open) {
+      setForm({ ...empty, nomorSurat: SIADP.nextNomorSurat(state.parcels) });
+      setErrors({});
+    }
+  }, [open]);
+
+  const codeStatus = useMemo(() => {
+    if (!form.kode) return null;
+    const exists = state.parcels.some((p) => p.kode === form.kode);
+    return exists ? { ok: false, msg: "Kode sudah ada — gunakan nomor lain" } : { ok: true, msg: "Kode tersedia" };
+  }, [form.kode, state.parcels]);
+
+  const change = (k, v) => setForm((f) => ({ ...f, [k]: v, ...(k === "kode" ? { kodeTouched: true } : {}) }));
+  const changeBatas = (k, v) => setForm((f) => ({ ...f, batas: { ...f.batas, [k]: v } }));
+
+  const uploadSurat = () => {
+    setForm((f) => ({ ...f, suratUploading: true }));
+    setTimeout(() => setForm((f) => ({ ...f, suratUploading: false, suratUploaded: true, suratFile: `scan_surat_${(f.kode||"baru").toLowerCase()}.pdf` })), 900);
+  };
+
+  const submit = () => {
+    const e = {};
+    if (!form.nama) e.nama = "Nama wajib diisi";
+    if (!form.nomorSurat) e.nomorSurat = "Nomor surat wajib diisi";
+    if (!form.rt) e.rt = "RT wajib diisi";
+    if (!form.rw) e.rw = "RW wajib diisi";
+    if (!form.alamat) e.alamat = "Lokasi wajib diisi";
+    if (!form.luas) e.luas = "Luas wajib diisi";
+    if (!form.pemilikSaatIni) e.pemilikSaatIni = "Pemilik wajib diisi";
+    if (!form.kode) e.kode = "Nomor surat tanah wajib diisi";
+    if (codeStatus && !codeStatus.ok) e.kode = "Kode sudah ada";
+    setErrors(e);
+    if (Object.keys(e).length > 0) {
+      toast.error("Data wajib belum lengkap", "Periksa kembali field yang ditandai");
+      return;
+    }
+    onSave({
+      id: "p-" + Date.now(),
+      kode: form.kode,
+      nama: form.nama,
+      nomorSurat: form.nomorSurat,
+      jenisSurat: form.jenisSurat,
+      kelurahan: form.kelurahan || "Loktuan",
+      nop: form.nop || "—",
+      rt: form.rt, rw: form.rw,
+      alamat: form.alamat,
+      luas: parseInt(form.luas, 10) || 0,
+      pemilikAwal: form.pemilikSaatIni,
+      pemilikSaatIni: form.pemilikSaatIni,
+      status: form.status,
+      tanggalDaftar: new Date(form.tanggalDaftar).toISOString(),
+      suratUploaded: form.suratUploaded,
+      suratFile: form.suratFile || "",
+      batas: form.batas,
+    });
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Tambah Surat Tanah Baru"
+      subtitle="Input data dokumen surat tanah (SPPHT) beserta letak tanah. Surat tanah baru bisa langsung dipilih di Arsip Baru setelah disimpan."
+      size="lg"
+      footer={<>
+        <Btn variant="ghost" onClick={onClose}>Batal</Btn>
+        <Btn variant="primary" icon="save" onClick={submit}>Simpan Surat Tanah</Btn>
+      </>}
+    >
+      <div style={{ display: "grid", gap: 18 }}>
+        {/* ----- Dokumen surat tanah (mengikuti format pada gambar) ----- */}
+        <div style={{ padding: 16, border: "1px solid var(--primary-soft)", background: "var(--primary-soft)", borderRadius: 12 }}>
+          <div className="section-label" style={{ color: "var(--primary-ink)" }}>
+            <Icon name="file-text" size={13} style={{ marginRight: 6 }}/> Dokumen Surat Tanah
+          </div>
+          <div className="grid-2">
+            <Field label="Nama" required error={errors.nama} hint="Nama pemohon/pemilik pada surat">
+              <input className={"input" + (errors.nama ? " error" : "")} placeholder="Contoh: ILHAM MUBAROK" value={form.nama}
+                onChange={(e) => { change("nama", e.target.value); if (!form.pemilikTouched) setForm((f)=>({...f, pemilikSaatIni: e.target.value})); }}/>
+            </Field>
+            <Field label="Nomor Surat" required error={errors.nomorSurat} hint="Format: 500.17.3.3/NO/KEC-BU/TAHUN">
+              <input className={"input mono" + (errors.nomorSurat ? " error" : "")} placeholder="500.17.3.3/41/KEC-BU/2026" value={form.nomorSurat} onChange={(e) => change("nomorSurat", e.target.value)}/>
+            </Field>
+          </div>
+          <div className="grid-2" style={{ marginTop: 14 }}>
+            <Field label="Jenis Surat" required>
+              <Select value={form.jenisSurat} onChange={(v) => change("jenisSurat", v)} options={JENIS_SURAT}/>
+            </Field>
+            <Field label="Tanggal surat" required>
+              <DatePicker value={form.tanggalDaftar} onChange={(v) => change("tanggalDaftar", v)} placeholder="Pilih tanggal surat"/>
+            </Field>
+          </div>
+
+          <div className="section-label" style={{ marginTop: 16, marginBottom: 8, color: "var(--primary-ink)" }}>Letak Tanah</div>
+          <div className="grid-2">
+            <Field label="Lokasi" required error={errors.alamat}>
+              <input className={"input" + (errors.alamat ? " error" : "")} placeholder="Jl. RE. Martadinata Gg. Elang RT.35" value={form.alamat} onChange={(e) => change("alamat", e.target.value)}/>
+            </Field>
+            <Field label="Kelurahan" required>
+              <input className="input" value={form.kelurahan} onChange={(e) => change("kelurahan", e.target.value)}/>
+            </Field>
+          </div>
+          <div className="grid-3" style={{ marginTop: 14 }}>
+            <Field label="RT" required error={errors.rt}>
+              <input className={"input" + (errors.rt ? " error" : "")} placeholder="35" value={form.rt} onChange={(e) => change("rt", e.target.value.padStart(2, "0").slice(0, 2))}/>
+            </Field>
+            <Field label="RW" required error={errors.rw}>
+              <input className={"input" + (errors.rw ? " error" : "")} placeholder="02" value={form.rw} onChange={(e) => change("rw", e.target.value.padStart(2, "0").slice(0, 2))}/>
+            </Field>
+            <Field label="Luas Tanah (m²)" required error={errors.luas}>
+              <input className={"input" + (errors.luas ? " error" : "")} type="number" placeholder="74.83" value={form.luas} onChange={(e) => change("luas", e.target.value)}/>
+            </Field>
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <div className={"upload-row " + (form.suratUploaded ? "done" : "")}>
+              <div className="file-ico"><Icon name={form.suratUploaded ? "check" : "file-text"} size={18}/></div>
+              <div className="meta">
+                <div className="name">Berkas pindai surat tanah</div>
+                <div className="sub">
+                  {form.suratUploaded ? `Terunggah · ${form.suratFile}` :
+                    form.suratUploading ? "Mengunggah…" : "PDF/JPG hasil scan dokumen surat tanah (simulasi)"}
+                </div>
+              </div>
+              {form.suratUploaded
+                ? <Btn size="sm" variant="ghost" icon="trash" onClick={() => setForm((f)=>({...f, suratUploaded:false, suratFile:""}))}>Hapus</Btn>
+                : <Btn size="sm" variant="subtle" icon="upload" onClick={uploadSurat} disabled={form.suratUploading}>Unggah</Btn>}
+            </div>
+          </div>
+        </div>
+
+        {/* ----- Identitas persil/registrasi ----- */}
+        <div>
+          <div className="section-label">Identitas registrasi</div>
+          <div className="grid-2">
+            <Field
+              label="Nomor surat tanah (kode arsip)"
+              required
+              error={errors.kode}
+              ok={codeStatus?.ok ? codeStatus.msg : null}
+              hint={!form.kode ? "Format: LKT-RT-RW-TAHUN-NOURUT (otomatis dari RT/RW)" : null}
+            >
+              <input
+                className={"input mono" + (errors.kode || (codeStatus && !codeStatus.ok) ? " error" : "")}
+                placeholder="LKT-35-02-2026-001"
+                value={form.kode}
+                onChange={(e) => change("kode", e.target.value.toUpperCase())}
+              />
+            </Field>
+            <Field label="NOP PBB" hint="Opsional saat pendaftaran awal">
+              <input className="input mono" placeholder="65.71.030.012.001-0000.0" value={form.nop} onChange={(e) => change("nop", e.target.value)}/>
+            </Field>
+          </div>
+          <div className="grid-2" style={{ marginTop: 14 }}>
+            <Field label="Pemilik saat ini" required error={errors.pemilikSaatIni}>
+              <input className={"input" + (errors.pemilikSaatIni ? " error" : "")} placeholder="Nama lengkap pemilik" value={form.pemilikSaatIni} onChange={(e) => { setForm((f)=>({...f, pemilikSaatIni: e.target.value, pemilikTouched: true})); }}/>
+            </Field>
+            <Field label="Status surat tanah">
+              <Select value={form.status} onChange={(v) => change("status", v)}
+                options={[{value:"terarsip",label:"Terarsip"},{value:"draft",label:"Draft"},{value:"sengketa",label:"Sengketa"}]}/>
+            </Field>
+          </div>
+        </div>
+
+        {/* ----- Batas tanah ----- */}
+        <div>
+          <div className="section-label">Batas tanah</div>
+          <div className="grid-2">
+            <Field label="Batas utara"><input className="input" placeholder="Tanah / Jalan / Saluran" value={form.batas.utara} onChange={(e) => changeBatas("utara", e.target.value)}/></Field>
+            <Field label="Batas selatan"><input className="input" placeholder="Tanah / Jalan / Saluran" value={form.batas.selatan} onChange={(e) => changeBatas("selatan", e.target.value)}/></Field>
+            <Field label="Batas timur"><input className="input" placeholder="Tanah / Jalan / Saluran" value={form.batas.timur} onChange={(e) => changeBatas("timur", e.target.value)}/></Field>
+            <Field label="Batas barat"><input className="input" placeholder="Tanah / Jalan / Saluran" value={form.batas.barat} onChange={(e) => changeBatas("barat", e.target.value)}/></Field>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+mountPage({
+  active: "data-tanah",
+  render: ({ state, setState }) => <DataTanah state={state} setState={setState} go={go}/>,
+});
+  </script>
+</body>
+</html>

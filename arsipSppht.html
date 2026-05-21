@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <meta name="description" content="SIAP Loktuan — Arsip SPPHT.">
+  <title>SIAP Loktuan — Arsip SPPHT</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
+  <link rel="stylesheet" href="assets/styles.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="assets/store.js"></script>
+  <script type="text/babel" src="assets/components.js"></script>
+  <script type="text/babel" src="assets/app.js"></script>
+
+  <script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+function ArsipSPPHTList({ state, go }) {
+  const [q, setQ] = useState("");
+  const [committedQ, setCommittedQ] = useState("");
+  const [rt, setRt] = useState("");
+  const [rw, setRw] = useState("");
+  const [jenis, setJenis] = useState("");
+  const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
+  const toast = useToast();
+
+  const rtsRws = useMemo(() => {
+    const rts = [...new Set(state.parcels.map((p) => p.rt))].sort();
+    const rws = [...new Set(state.parcels.map((p) => p.rw))].sort();
+    return { rts, rws };
+  }, [state.parcels]);
+
+  const filtered = useMemo(() => {
+    const lq = committedQ.trim().toLowerCase();
+    return state.archives.filter((a) => {
+      const p = state.parcels.find((x) => x.id === a.parcelId);
+      if (!p) return false;
+      if (rt && p.rt !== rt) return false;
+      if (rw && p.rw !== rw) return false;
+      if (jenis && a.jenis !== jenis) return false;
+      if (status && a.status !== status) return false;
+      if (!lq) return true;
+      const hay = [
+        a.pengalih?.nik, a.penerima?.nik,
+        p.kode, p.nop, a.nomorSPPHT, p.nomorSurat,
+        p.pemilikSaatIni, a.pengalih?.nama, a.penerima?.nama,
+        p.alamat, `${p.rt}/${p.rw}`, a.jenis,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(lq);
+    }).sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
+  }, [state, committedQ, rt, rw, jenis, status]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => { if (page > totalPages) setPage(1); }, [totalPages]);
+
+  const commitSearch = () => {
+    setCommittedQ(q);
+    setPage(1);
+    toast.info("Pencarian diperbarui", q ? `Kata kunci: "${q}"` : "Semua arsip ditampilkan");
+  };
+  const applyFilter = () => {
+    setPage(1);
+    toast.info("Filter diterapkan", "Hasil tabel sudah disesuaikan");
+  };
+
+  return (
+    <div data-screen-label="Arsip SPPHT">
+      <div className="card">
+        <div className="card-head">
+          <div style={{ flex: 1 }}>
+            <h3>Daftar Arsip SPPHT / Peralihan</h3>
+            <div className="sub">Cari berdasar NIK, nomor surat tanah, NOP, nomor SPPHT, nama, atau alamat.</div>
+          </div>
+          <Btn variant="primary" icon="plus" onClick={() => go("arsip-baru")}>Arsip Baru</Btn>
+        </div>
+
+        <div className="filter-bar">
+          <Field label="Kata kunci">
+            <div className="search-input" style={{ width: 360 }}>
+              <Icon name="search" size={16}/>
+              <input
+                placeholder="NIK / Nomor SPPHT / NOP / Nama / Alamat…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") commitSearch(); }}
+              />
+              {q && <button className="icon-btn" style={{ width: 22, height: 22, border: 0, background: "transparent" }} onClick={() => { setQ(""); setCommittedQ(""); }}>
+                <Icon name="x" size={14}/>
+              </button>}
+            </div>
+          </Field>
+          <Field label="RT">
+            <Select width={110} value={rt} onChange={setRt} placeholder="Semua" options={rtsRws.rts}/>
+          </Field>
+          <Field label="RW">
+            <Select width={110} value={rw} onChange={setRw} placeholder="Semua" options={rtsRws.rws}/>
+          </Field>
+          <Field label="Jenis peralihan">
+            <Select width={170} value={jenis} onChange={setJenis} placeholder="Semua"
+              options={["Jual Beli","Waris","Hibah","Tukar Menukar","Pelepasan Hak"]}/>
+          </Field>
+          <Field label="Status">
+            <Select width={150} value={status} onChange={setStatus} placeholder="Semua"
+              options={[{value:"terarsip",label:"Terarsip"},{value:"draft",label:"Draft"},{value:"sengketa",label:"Sengketa"}]}/>
+          </Field>
+          <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+            <Btn variant="ghost" icon="refresh" onClick={() => { setQ(""); setCommittedQ(""); setRt(""); setRw(""); setJenis(""); setStatus(""); setPage(1); }}>Reset</Btn>
+            <Btn variant="subtle" icon="search" onClick={commitSearch}>Cari</Btn>
+            <Btn variant="primary" icon="filter" onClick={applyFilter}>Terapkan</Btn>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Nomor Surat Tanah</th>
+                <th>Lokasi</th>
+                <th>Pemilik</th>
+                <th>Jenis</th>
+                <th>Nomor SPPHT</th>
+                <th>Tanggal</th>
+                <th>Status</th>
+                <th className="col-actions">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageData.length === 0 && <EmptyRow cols={8} title="Tidak ada arsip yang cocok" sub="Coba ubah kata kunci atau atur ulang filter."/>}
+              {pageData.map((a) => {
+                const p = state.parcels.find((x) => x.id === a.parcelId);
+                return (
+                  <tr key={a.id}>
+                    <td className="mono">{p?.kode}</td>
+                    <td>
+                      <div>{p?.alamat}</div>
+                      <div style={{ color: "var(--ink-3)", fontSize: 11.5 }}>RT {p?.rt}/RW {p?.rw}</div>
+                    </td>
+                    <td>{p?.pemilikSaatIni}</td>
+                    <td><Badge variant={a.jenis === "Waris" ? "info" : a.jenis === "Hibah" ? "warning" : "primary"}>{a.jenis}</Badge></td>
+                    <td className="mono">{a.nomorSPPHT}</td>
+                    <td>{SIADP.formatDate(a.tanggal)}</td>
+                    <td><StatusBadge status={a.status}/></td>
+                    <td className="col-actions">
+                      <Btn size="sm" variant="subtle" icon="open" onClick={() => go("detail", a.parcelId)}>Detail</Btn>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <Pagination page={page} pageSize={pageSize} total={filtered.length} onPage={setPage}/>
+      </div>
+    </div>
+  );
+}
+
+mountPage({
+  active: "arsip-sppht",
+  render: ({ state }) => <ArsipSPPHTList state={state} go={go}/>,
+});
+  </script>
+</body>
+</html>
